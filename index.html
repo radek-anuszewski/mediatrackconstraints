@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta charset="UTF-8">
+    <title>Image constraints test</title>
+    <style>
+        .main {
+            padding: 40px;
+        }
+
+        .video {
+            width: 100%;
+            max-width: 640px;
+        }
+    </style>
+    <script type="module">
+        const displaySettings = () => {
+            document.querySelector('#settings').innerHTML = JSON.stringify(track.getSettings(), null, 2)
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: 'environment',
+            },
+        });
+        const video = document.querySelector('#video');
+        video.srcObject = stream;
+        video.play();
+        const track = stream.getVideoTracks()[0];
+        const capabilities = track.getCapabilities();
+        const settings = track.getSettings();
+
+        document.querySelector('#capabilities').innerHTML = JSON.stringify(capabilities, null, 2);
+
+        const constraintsToSupport = ['whiteBalanceMode', 'exposureMode', 'focusMode', 'exposureCompensation',
+            'colorTemperature', 'iso', 'brightness', 'contrast', 'saturation', 'sharpness', 'focusDistance',
+            'zoom', 'torch',
+        ];
+
+        displaySettings();
+
+        const management = document.querySelector('#management');
+        constraintsToSupport.forEach(constraint => {
+            const capability = capabilities[constraint];
+            if (!capability) {
+                return;
+            }
+            if (Array.isArray(capability)) {
+                management.innerHTML += `
+                    <div>
+                        <label for="${constraint}">${constraint}</label>
+                        <select id="${constraint}">
+                            ${capability.map(el => `<option value="${el}">${el}</option>`)}
+                        </select>
+                    </div>
+                `;
+                return;
+            }
+            if (typeof capability === 'boolean') {
+                management.innerHTML += `
+                    <div>
+                        <label for="${constraint}">${constraint}</label>
+                        <input type="checkbox" id="${constraint}" ${settings[constraint] ? 'checked' : ''}>
+                    </div>
+                `;
+                return;
+            }
+            if (typeof capability === 'object') {
+                management.innerHTML += `
+                    <div>
+                        <label for="${constraint}">${constraint}</label>
+                        <input type="range" id="${constraint}"
+                                min="${capability.min}" max="${capability.max}"
+                                step="${capability.step}" value="${settings[constraint]}">
+                    </div>
+                `;
+                return;
+            }
+        });
+
+        [...document.querySelectorAll('input')].forEach(el => el.addEventListener('change', e => {
+            const { id: key, value, checked, type } = e.target;
+            track.applyConstraints({
+                advanced: [
+                    {
+                        [key]: type === 'checkbox' ? checked : value,
+                    },
+                ],
+            });
+            displaySettings();
+        }));
+
+        const capture = new ImageCapture(track);
+        document.querySelector('#takePhoto').addEventListener('click', async () => {
+            const blob = await capture.takePhoto();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const extension = blob.type.split('/')[1];
+            a.download = `picture.${extension}`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+    </script>
+</head>
+<body>
+<main class="main"
+>
+    <video class="video" id="video"></video>
+    <br>
+    <button id="takePhoto">Take photo</button>
+    <div id="management">
+    </div>
+    <h3>Current settings</h3>
+    <pre id="settings"></pre>
+    <h3> Capabilities</h3>
+    <pre id="capabilities"></pre>
+</main>
+</body>
+</html>
